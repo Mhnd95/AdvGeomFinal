@@ -51,6 +51,68 @@ mu = E / (2 * (1 + nu))                      # Second Lamé parameter (shear mod
 k_mu = k / mu                                # Hydraulic conductivity (permeability/viscosity)
 
 dirichlet_tags = ["top_bottom", "wellbore"]
-#####################################
-######## ADD YOU CODE HERE ##########
-#####################################
+
+# ============================================================================
+# SETUP OUTPUT AND MESH
+# ============================================================================
+# Create output directory if it doesn't exist
+output_dir = "results"
+if !isdir(output_dir)
+    mkdir(output_dir)
+end
+
+# Load the Gmsh mesh from file
+# The mesh should be a square domain with properly tagged boundaries
+model = GmshDiscreteModel("wellbore.msh")
+
+# Define boundary tags for applying boundary conditions
+# These tags should match the physical groups defined in the Gmsh file
+dirichlet_tags = ["top_bottom", "wellbore"]
+
+# Export the mesh for visualization
+writevtk(model, "model")  # Save model for visualization in ParaView
+
+# Print information about boundary entities for debugging
+# This helps verify that boundary conditions will be applied to the correct entities
+labels = get_face_labeling(model)
+for tag in dirichlet_tags
+    println("Entities tagged as $tag: ", findall(labels.tag_to_name .== tag))
+end
+
+# ============================================================================
+# DOMAIN AND INTEGRATION SETUP
+# ============================================================================
+# Set up integration degree for numerical quadrature
+degree = 2  # Quadrature order
+
+# Create triangulation and integration measures
+Ω = Triangulation(model)           # Domain triangulation
+dΩ = Measure(Ω, degree)            # Volume integration measure
+Γ = BoundaryTriangulation(model)   # Boundary triangulation
+dΓ = Measure(Γ, degree)            # Boundary integration measure
+
+# ============================================================================
+# FINITE ELEMENT SPACES
+# ============================================================================
+# Define polynomial orders for the mixed formulation
+order_u = 2  # P2 (quadratic) elements for displacement
+order_p = 1  # P1 (linear) elements for pressure - satisfies LBB condition
+
+# Create reference finite elements
+reffe_u = ReferenceFE(lagrangian, VectorValue{2,Float64}, order_u)  # Vector-valued for displacement
+reffe_p = ReferenceFE(lagrangian, Float64, order_p)                 # Scalar-valued for pressure
+
+# ============================================================================
+# BOUNDARY CONDITIONS
+# ============================================================================
+# Displacement space with Dirichlet BC on top and bottom (fixed in y-direction)
+δu = TestFESpace(model, reffe_u, conformity=:H1, 
+                 dirichlet_tags=["top_bottom"])
+u = TrialFESpace(δu, x -> VectorValue(0.0, 0.0))  # Zero displacement at bottom boundary
+
+# Pressure space with Dirichlet BC on left and right sides (drained boundaries)
+δp = TestFESpace(model, reffe_p, conformity=:H1, dirichlet_tags=["wellbore"])
+p = TrialFESpace(δp, Pb)  # Boundary pressure at wellbore
+
+# Create multi-field space for the coupled problem
+Y = MultiFieldFESpace([δu, δp])  # Combined test space for displacement and pressure
