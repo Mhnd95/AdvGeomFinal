@@ -115,10 +115,6 @@ p = TrialFESpace(δp, Pb)  # Boundary pressure at wellbore
 # Create multi-field space for the coupled problem
 Y = MultiFieldFESpace([δu, δp])  # Combined test space for displacement and pressure
 
-# Create special measure for the top boundary where traction is applied
-Γ_top = BoundaryTriangulation(model, tags="top_bottom")  # Extract top boundary
-dΓ_top = Measure(Γ_top, degree)                   # Integration measure for top boundary
-
 # ============================================================================
 # CONSTITUTIVE EQUATIONS
 # ============================================================================
@@ -190,14 +186,8 @@ a(t, (u,p), (δu,δp)) = ∫(
     δp * B * divergence(∂t(u)) 
 ) * dΩ
 
-# Linear form l(δu,δp) - represents external forces/sources
-l(t, (δu,δp)) = ∫( 
-    # Traction force applied at the top boundary
-    δu ⋅ VectorValue(0.0, -Pb)  # Negative F for compression in y-direction
-) * dΓ_top 
-
 # Residual form for the nonlinear solver
-res(t, (u,p), (δu,δp)) = a(t, (u,p), (δu,δp)) - l(t, (δu,δp))
+res(t, (u,p), (δu,δp)) = a(t, (u,p), (δu,δp))
 
 # ============================================================================
 # TRANSIENT PROBLEM SETUP
